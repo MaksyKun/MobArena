@@ -1,8 +1,6 @@
 package com.garbagemule.MobArena;
 
-import static com.garbagemule.MobArena.util.config.ConfigUtils.makeSection;
-import static com.garbagemule.MobArena.util.config.ConfigUtils.parseLocation;
-
+import com.garbagemule.MobArena.config.YamlParser;
 import com.garbagemule.MobArena.framework.Arena;
 import com.garbagemule.MobArena.framework.ArenaMaster;
 import com.garbagemule.MobArena.things.InvalidThingInputString;
@@ -10,30 +8,28 @@ import com.garbagemule.MobArena.things.Thing;
 import com.garbagemule.MobArena.util.JoinInterruptTimer;
 import com.garbagemule.MobArena.util.Slugs;
 import com.garbagemule.MobArena.util.config.ConfigUtils;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.io.File;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-public class ArenaMasterImpl implements ArenaMaster
-{
+import static com.garbagemule.MobArena.util.config.ConfigUtils.makeSection;
+import static com.garbagemule.MobArena.util.config.ConfigUtils.parseLocation;
+
+public class ArenaMasterImpl implements ArenaMaster {
     private MobArena plugin;
+
+    private List<File> arenaFiles;
 
     private List<Arena> arenas;
     private Map<Player, Arena> arenaMap;
@@ -53,6 +49,7 @@ public class ArenaMasterImpl implements ArenaMaster
     public ArenaMasterImpl(MobArena plugin) {
         this.plugin = plugin;
 
+        this.arenaFiles = new ArrayList<>();
         this.arenas = new ArrayList<>();
         this.arenaMap = new HashMap<>();
 
@@ -249,6 +246,7 @@ public class ArenaMasterImpl implements ArenaMaster
     public void initialize() {
         loadSettings();
         loadClasses();
+        migrateArenas();
         loadArenas();
     }
 
@@ -369,8 +367,8 @@ public class ArenaMasterImpl implements ArenaMaster
 
         // Create an ArenaClass with the config-file name.
         ArenaClass arenaClass = classname.equals("My Items")
-            ? new ArenaClass.MyItems(price, weps, arms, this)
-            : new ArenaClass(classname, price, weps, arms);
+                ? new ArenaClass.MyItems(price, weps, arms, this)
+                : new ArenaClass(classname, price, weps, arms);
 
         // Load items
         loadClassItems(section, arenaClass);
@@ -414,9 +412,9 @@ public class ArenaMasterImpl implements ArenaMaster
 
         try {
             List<Thing> things = items.stream()
-                .map(String::trim)
-                .map(plugin.getThingManager()::parse)
-                .collect(Collectors.toList());
+                    .map(String::trim)
+                    .map(plugin.getThingManager()::parse)
+                    .collect(Collectors.toList());
             arenaClass.setItems(things);
         } catch (InvalidThingInputString e) {
             throw new ConfigError("Failed to parse item for class " + arenaClass.getConfigName() + ": " + e.getInput());
@@ -429,11 +427,11 @@ public class ArenaMasterImpl implements ArenaMaster
 
         // Specific armor pieces
         String name = arenaClass.getConfigName();
-        loadClassArmorPiece(section, "helmet",     name, arenaClass::setHelmet);
+        loadClassArmorPiece(section, "helmet", name, arenaClass::setHelmet);
         loadClassArmorPiece(section, "chestplate", name, arenaClass::setChestplate);
-        loadClassArmorPiece(section, "leggings",   name, arenaClass::setLeggings);
-        loadClassArmorPiece(section, "boots",      name, arenaClass::setBoots);
-        loadClassArmorPiece(section, "offhand",    name, arenaClass::setOffHand);
+        loadClassArmorPiece(section, "leggings", name, arenaClass::setLeggings);
+        loadClassArmorPiece(section, "boots", name, arenaClass::setBoots);
+        loadClassArmorPiece(section, "offhand", name, arenaClass::setOffHand);
     }
 
     private void loadClassArmorLegacyNode(ConfigurationSection section, ArenaClass arenaClass) {
@@ -449,9 +447,9 @@ public class ArenaMasterImpl implements ArenaMaster
         try {
             // Prepend "armor:" for the armor thing parser
             List<Thing> things = armor.stream()
-                .map(String::trim)
-                .map(s -> plugin.getThingManager().parse("armor", s))
-                .collect(Collectors.toList());
+                    .map(String::trim)
+                    .map(s -> plugin.getThingManager().parse("armor", s))
+                    .collect(Collectors.toList());
             arenaClass.setArmor(things);
         } catch (InvalidThingInputString e) {
             throw new ConfigError("Failed to parse armor for class " + arenaClass.getConfigName() + ": " + e.getInput());
@@ -485,9 +483,9 @@ public class ArenaMasterImpl implements ArenaMaster
         try {
             // Prepend "effect:" for the potion effect thing parser
             List<Thing> things = effects.stream()
-                .map(String::trim)
-                .map(s -> plugin.getThingManager().parse("effect", s))
-                .collect(Collectors.toList());
+                    .map(String::trim)
+                    .map(s -> plugin.getThingManager().parse("effect", s))
+                    .collect(Collectors.toList());
 
             arenaClass.setEffects(things);
         } catch (InvalidThingInputString e) {
@@ -498,8 +496,8 @@ public class ArenaMasterImpl implements ArenaMaster
     private void loadClassPermissions(ArenaClass arenaClass, ConfigurationSection section) {
         try {
             section.getStringList("permissions").stream()
-                .map(s -> plugin.getThingManager().parse("perm", s))
-                .forEach(arenaClass::addPermission);
+                    .map(s -> plugin.getThingManager().parse("perm", s))
+                    .forEach(arenaClass::addPermission);
         } catch (InvalidThingInputString e) {
             throw new ConfigError("Failed to parse permission of class " + arenaClass.getConfigName() + ": " + e.getInput());
         }
@@ -508,8 +506,8 @@ public class ArenaMasterImpl implements ArenaMaster
     private void loadClassLobbyPermissions(ArenaClass arenaClass, ConfigurationSection section) {
         try {
             section.getStringList("lobby-permissions").stream()
-                .map(s -> plugin.getThingManager().parse("perm", s))
-                .forEach(arenaClass::addLobbyPermission);
+                    .map(s -> plugin.getThingManager().parse("perm", s))
+                    .forEach(arenaClass::addLobbyPermission);
         } catch (InvalidThingInputString e) {
             throw new ConfigError("Failed to parse lobby-permission of class " + arenaClass.getConfigName() + ": " + e.getInput());
         }
@@ -519,37 +517,26 @@ public class ArenaMasterImpl implements ArenaMaster
      * Load all arena-related stuff.
      */
     public void loadArenas() {
-        FileConfiguration config = plugin.getConfig();
-        ConfigurationSection section = makeSection(config, "arenas");
-        Set<String> arenanames = section.getKeys(false);
-
-        // If no arenas were found, create a default node.
-        if (arenanames == null || arenanames.isEmpty()) {
-            createArenaNode(section, "default", plugin.getServer().getWorlds().get(0), false);
+        File parentDir = new File(plugin.getDataFolder(), "arenas");
+        this.arenaFiles = getAllArenaFiles(parentDir);
+        if (arenaFiles.isEmpty()) {
+            Arena arena = createArenaNode("default", plugin.getServer().getWorlds().get(0));
+            arena.saveConfig();
+            arenas.add(arena);
+            return;
         }
 
         arenas = new ArrayList<>();
-        for (World w : Bukkit.getServer().getWorlds()) {
-            loadArenasInWorld(w.getName());
+        for (File file : arenaFiles) {
+            arenas.add(loadArena(file));
         }
     }
 
     public void loadArenasInWorld(String worldName) {
-        FileConfiguration config = plugin.getConfig();
-        Set<String> arenaNames = config.getConfigurationSection("arenas").getKeys(false);
-        if (arenaNames == null || arenaNames.isEmpty()) {
-            return;
-        }
-
         List<Arena> arenas = new ArrayList<>();
-        for (String arenaName : arenaNames) {
-            Arena arena = getArenaWithName(arenaName);
-            if (arena != null) continue;
-
-            String arenaWorld = config.getString("arenas." + arenaName + ".settings.world", "");
-            if (!arenaWorld.equals(worldName)) continue;
-
-            Arena loaded = loadArena(arenaName);
+        for (Arena arena : this.arenas) {
+            if (!arena.getWorld().getName().equals(worldName)) continue;
+            Arena loaded = loadArena(arena.configName());
             if (loaded != null) {
                 arenas.add(loaded);
             }
@@ -568,9 +555,9 @@ public class ArenaMasterImpl implements ArenaMaster
                 Arena b = arenas.get(j);
                 if (a.getRegion().intersects(b.getRegion())) {
                     plugin.getLogger().warning(String.format(
-                        "Regions of arenas '%s' and '%s' overlap!",
-                        a.configName(),
-                        b.configName()
+                            "Regions of arenas '%s' and '%s' overlap!",
+                            a.configName(),
+                            b.configName()
                     ));
                 }
             }
@@ -578,48 +565,30 @@ public class ArenaMasterImpl implements ArenaMaster
     }
 
     public void unloadArenasInWorld(String worldName) {
-        FileConfiguration config = plugin.getConfig();
-        Set<String> arenaNames = config.getConfigurationSection("arenas").getKeys(false);
-        if (arenaNames == null || arenaNames.isEmpty()) {
-            return;
-        }
-        for (String arenaName : arenaNames) {
-            Arena arena = getArenaWithName(arenaName);
+        for (Arena arena : arenas) {
             if (arena == null) continue;
-
             String arenaWorld = arena.getWorld().getName();
             if (!arenaWorld.equals(worldName)) continue;
-
             arena.forceEnd();
             arenas.remove(arena);
         }
     }
 
     // Load an already existing arena node
-    private Arena loadArena(String arenaname) {
-        FileConfiguration config = plugin.getConfig();
-        ConfigurationSection section  = makeSection(config, "arenas." + arenaname);
-        ConfigurationSection settings = makeSection(section, "settings");
-        String worldName = settings.getString("world", "");
-        World world;
-
-        if (!worldName.equals("")) {
-            world = plugin.getServer().getWorld(worldName);
-            if (world == null) {
-                plugin.getLogger().warning("World '" + worldName + "' for arena '" + arenaname + "' was not found...");
-                return null;
+    public Arena loadArena(String arenaName) {
+        List<File> arenaFiles = getAllArenaFiles(new File(plugin.getDataFolder(), "arenas"));
+        for (File file : arenaFiles) {
+            if (file.getName().replace(".yml", "").equalsIgnoreCase(arenaName)) {
+                return loadArena(file);
             }
-        } else {
-            world = plugin.getServer().getWorlds().get(0);
-            plugin.getLogger().warning("Could not find the world for arena '" + arenaname + "'. Using default world ('" + world.getName() + "')! Check the config-file!");
         }
+        return null;
+    }
 
-        ConfigUtils.addMissingRemoveObsolete(plugin, "settings.yml", settings);
-        ConfigUtils.addIfEmpty(plugin, "waves.yml", makeSection(section, "waves"));
-
-        Arena arena = new ArenaImpl(plugin, section, arenaname, world);
+    private Arena loadArena(File file) {
+        Arena arena = new ArenaImpl(file, file.getName().replace(".yml", ""));
         arenas.add(arena);
-        plugin.getLogger().info("Loaded arena '" + arenaname + "'");
+        plugin.getLogger().info("Loaded arena '" + arena.getSlug() + "'");
         return arena;
     }
 
@@ -631,6 +600,7 @@ public class ArenaMasterImpl implements ArenaMaster
         arena.forceEnd();
         arenas.remove(arena);
 
+        // TODO single arena file reload before
         plugin.reloadConfig();
 
         loadArena(name);
@@ -655,7 +625,7 @@ public class ArenaMasterImpl implements ArenaMaster
         // Add missing settings and remove obsolete ones
         ConfigUtils.addMissingRemoveObsolete(plugin, "settings.yml", makeSection(section, "settings"));
         section.set("settings.world", world.getName());
-        ConfigUtils.addIfEmpty(plugin, "waves.yml",   makeSection(section, "waves"));
+        ConfigUtils.addIfEmpty(plugin, "waves.yml", makeSection(section, "waves"));
         ConfigUtils.addIfEmpty(plugin, "rewards.yml", makeSection(section, "rewards"));
         plugin.saveConfig();
 
@@ -680,6 +650,62 @@ public class ArenaMasterImpl implements ArenaMaster
     }
 
     public void saveConfig() {
+        plugin.saveConfig();
+    }
+
+    private List<File> getAllArenaFiles(File parent) {
+        List<File> entries = new ArrayList<>();
+        if (!parent.exists()) {
+            parent.mkdirs();
+        }
+        for (File file : parent.listFiles()) {
+            if (file.isFile() && file.getName().endsWith(".yml")) {
+                entries.add(file);
+            } else if (parent.isDirectory()) {
+                entries.addAll(getAllArenaFiles(file));
+            }
+        }
+        return entries;
+    }
+
+    private void migrateArenas() {
+        File parent = new File(plugin.getDataFolder(), "arenas");
+        if (!parent.exists()) {
+            parent.mkdirs();
+        }
+
+        FileConfiguration config = plugin.getConfig();
+        ConfigurationSection arenas = config.getConfigurationSection("arenas");
+        if (arenas == null) {
+            return;
+        }
+
+        for (String arenaName : arenas.getKeys(false)) {
+            ConfigurationSection arena = arenas.getConfigurationSection(arenaName);
+            if (arena == null) {
+                continue;
+            }
+            File file = new File(parent, arenaName + ".yml");
+            try {
+                if (!file.exists()) {
+                    file.createNewFile();
+                }
+                YamlConfiguration _config = YamlParser.loadConfiguration(file);
+                _config.set("settings", arena.getConfigurationSection("settings"));
+                _config.set("waves", arena.getConfigurationSection("waves"));
+                _config.set("rewards", arena.getConfigurationSection("rewards"));
+                _config.set("coords", arena.getConfigurationSection("coords"));
+                _config.set("class-limits", arena.getConfigurationSection("class-limits"));
+
+                _config.save(file);
+                MobArena.getInstance().getLogger().info("Migrated arena '" + arenaName + "' to arenas folder.");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Remove the old arenas node
+        config.set("arenas", null);
         plugin.saveConfig();
     }
 }

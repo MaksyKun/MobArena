@@ -19,6 +19,7 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -43,11 +44,11 @@ public class ArenaRegion
     private ConfigurationSection spawns;
     private ConfigurationSection chests;
 
-    public ArenaRegion(ConfigurationSection section, Arena arena) {
+    public ArenaRegion(YamlConfiguration config, Arena arena) {
         this.arena  = arena;
         refreshWorld();
 
-        this.coords = makeSection(section, "coords");
+        this.coords = makeSection(config, "coords");
         this.spawns = makeSection(coords,  "spawnpoints");
         this.chests = makeSection(coords,  "containers");
 

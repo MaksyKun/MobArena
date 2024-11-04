@@ -6,6 +6,7 @@ import com.garbagemule.MobArena.ScoreboardManager.NullScoreboardManager;
 import com.garbagemule.MobArena.announce.Announcer;
 import com.garbagemule.MobArena.announce.MessengerAnnouncer;
 import com.garbagemule.MobArena.announce.TitleAnnouncer;
+import com.garbagemule.MobArena.config.YamlParser;
 import com.garbagemule.MobArena.steps.Step;
 import com.garbagemule.MobArena.steps.StepFactory;
 import com.garbagemule.MobArena.steps.PlayerJoinArena;
@@ -27,6 +28,7 @@ import com.garbagemule.MobArena.things.Thing;
 import com.garbagemule.MobArena.things.ThingPicker;
 import com.garbagemule.MobArena.util.ClassChests;
 import com.garbagemule.MobArena.util.Slugs;
+import com.garbagemule.MobArena.util.config.ConfigUtils;
 import com.garbagemule.MobArena.util.inventory.InventoryManager;
 import com.garbagemule.MobArena.util.timer.AutoStartTimer;
 import com.garbagemule.MobArena.util.timer.StartDelayTimer;
@@ -58,6 +60,7 @@ import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.potion.PotionEffect;
 
+import java.io.File;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -84,6 +87,7 @@ public class ArenaImpl implements Arena
     private Announcer announcer;
 
     // Settings section of the config-file for this arena.
+    private YamlParser config;
     private ConfigurationSection settings;
 
     // Run-time settings and critical config settings
@@ -154,16 +158,31 @@ public class ArenaImpl implements Arena
     /**
      * Primary constructor. Requires a name and a world.
      */
-    public ArenaImpl(MobArena plugin, ConfigurationSection section, String name, World world) {
-        if (world == null)
-            throw new NullPointerException("[MobArena] ERROR! World for arena '" + name + "' does not exist!");
-
+    public ArenaImpl(File file, String name) {
+        this.plugin   = MobArena.getInstance();
+        this.config = new YamlParser(file);
         this.name     = name;
+        this.settings = makeSection(config, "settings");
+
+        ConfigUtils.addMissingRemoveObsolete(plugin, "settings.yml", settings);
+        ConfigUtils.addIfEmpty(plugin, "waves.yml", makeSection(config, "waves"));
+
+        String worldName = settings.getString("world", "");
+        World world;
+        if (!worldName.equals("")) {
+            world = plugin.getServer().getWorld(worldName);
+            if (world == null) {
+                plugin.getLogger().warning("World '" + worldName + "' for arena '" + name + "' was not found...");
+                return;
+            }
+        } else {
+            world = plugin.getServer().getWorlds().get(0);
+            plugin.getLogger().warning("Could not find the world for arena '" + name + "'. Using default world ('" + world.getName() + "')! Check the config-file!");
+        }
+        this.world   = world;
+
         this.slug     = Slugs.create(name);
-        this.world    = world;
-        this.plugin   = plugin;
-        this.settings = makeSection(section, "settings");
-        this.region   = new ArenaRegion(section, this);
+        this.region   = new ArenaRegion(config, this);
 
         this.enabled = settings.getBoolean("enabled", false);
         this.protect = settings.getBoolean("protect", true);
@@ -189,7 +208,7 @@ public class ArenaImpl implements Arena
 
         // Classes, items and permissions
         this.classes      = plugin.getArenaMaster().getClasses();
-        this.limitManager = new ClassLimitManager(this, classes, makeSection(section, "class-limits"));
+        this.limitManager = new ClassLimitManager(this, classes, makeSection(config, "class-limits"));
 
         String defaultClassName = settings.getString("default-class", null);
         if (defaultClassName != null) {
@@ -207,10 +226,10 @@ public class ArenaImpl implements Arena
         this.monsterManager = new MonsterManager();
 
         // Wave stuff
-        this.waveManager  = new WaveManager(this, section.getConfigurationSection("waves"));
-        this.everyWaveMap = MAUtils.getArenaRewardMap(plugin, section, name, "every");
-        this.afterWaveMap = MAUtils.getArenaRewardMap(plugin, section, name, "after");
-        this.waveTiersMap = MAUtils.getArenaRewardMap(plugin, section, name, "tiers");
+        this.waveManager  = new WaveManager(this, config.getConfigurationSection("waves"));
+        this.everyWaveMap = MAUtils.getArenaRewardMap(plugin, config, name, "every");
+        this.afterWaveMap = MAUtils.getArenaRewardMap(plugin, config, name, "after");
+        this.waveTiersMap = MAUtils.getArenaRewardMap(plugin, config, name, "tiers");
         this.spawnpointMinDistanceSquared = Math.pow(settings.getDouble("spawnpoint-min-distance", 0), 2);
         this.spawnpointMaxDistanceSquared = Math.pow(settings.getDouble("spawnpoint-max-distance", 15), 2);
 
@@ -1666,5 +1685,11 @@ public class ArenaImpl implements Arena
     @Override
     public String toString() {
         return ((enabled && region.isSetup()) ? ChatColor.GREEN : ChatColor.GRAY) + configName();
+    }
+
+    @Override
+    public void saveConfig() {
+        // TODO this needs to update the config file with a bit more effort
+        config.save();
     }
 }

@@ -47,6 +47,8 @@ import java.util.logging.Level;
  */
 public class MobArena extends JavaPlugin
 {
+    private static MobArena instance;
+
     private ArenaMaster arenaMaster;
 
     private Finance finance;
@@ -70,6 +72,7 @@ public class MobArena extends JavaPlugin
 
     @Override
     public void onLoad() {
+        instance = this;
         thingman = new ThingManager(this);
 
         pickman = new ThingPickerManager(thingman);
@@ -282,6 +285,10 @@ public class MobArena extends JavaPlugin
             reloadConfig();
         }
         return config;
+    }
+
+    public static MobArena getInstance() {
+        return instance;
     }
 
     public ArenaMaster getArenaMaster() {
